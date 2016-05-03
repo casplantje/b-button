@@ -1,8 +1,10 @@
 #!/usr/bin/perl
 use strict;
 use Switch;
+use FindBin;
 use Device::BCM2835;
 use VideoLan::Client;
+use File::Compare;
 use Time::HiRes qw[gettimeofday tv_interval];
 
 # Define and initialize butons
@@ -11,12 +13,31 @@ my @buttons = (Device::BCM2835::RPI_V2_GPIO_P1_11,
 		Device::BCM2835::RPI_V2_GPIO_P1_15, 
 		Device::BCM2835::RPI_V2_GPIO_P1_16);
 
+# Time to wait until the system shuts down after power connection loss
+my $poweroffDelay = 60;
+
+# And here I got fed up with the irrational pin numbering
+my $powerSense = 13;
+my $poweroffTime = 0;
+
 # arrays for keeping track of the buttons
 my @buttonTime;
 
 
 # Globally used vlc object
 my $vlc_obj = new VideoLan::Client(PASSWD => 'b-knop');
+
+sub switchNetwork
+{
+	if (compare("/etc/network/interfaces", "/etc/network/interfaces.client") == 0)
+	{
+		system("$FindBin::Bin/wifi-host.sh");
+	}
+	else
+	{
+		system("$FindBin::Bin/wifi-client.sh");
+	}
+}
 
 sub initButton
 {
@@ -47,7 +68,7 @@ sub buttonAction
 				exec "poweroff";
 			} else
 			{
-				# For now perhaps switch wifi mode?
+				switchNetwork();
 			}
 		}
 		case 2
@@ -86,6 +107,25 @@ my $running = 1;
 while ($running)
 {
     Device::BCM2835::delay(50);
+
+	# Check power sense
+	if (Device::BCM2835::gpio_lev($powerSense) == HIGH)
+	{
+		# Reset poweroff timer
+		$poweroffTime = 0;
+	} else
+	{
+		# Start poweroff timer
+		if ($poweroffTime == 0)
+		{
+			print "Power lost, shutting down in $poweroffDelay\n";
+			$poweroffTime = [gettimeofday()];
+		}
+		if (tv_interval($poweroffTime) > $poweroffDelay)
+		{
+			exec "poweroff";
+		}
+	}
 
 	# Check the state of all buttons
 	for my $i (0 .. $#buttons)

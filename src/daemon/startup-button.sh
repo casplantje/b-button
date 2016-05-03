@@ -1,2 +1,2 @@
 #!/bin/sh
-/home/pi/b-button/button.pl > /dev/null
+/home/pi/src/b-button/src/daemon/button.pl > /dev/null
